@@ -66,63 +66,69 @@ bool chessboard::check_move(chessmove move) const
 
 bool chessboard::check_no_check(chessmove move) const
 {
-	chessboard test_board = *this;
-	test_board.make_test_move(move);
-	return !test_board.is_self_check();
+	chessboard __board = *this;
+	__board.make_test_move(move);
+	return !__board.is_self_check();
 }
 
 int16_t chessboard::evaluate() const
 {
-	int16_t eval = 0, mg_eval = 0, eg_eval = 0, game_phase_score = 0;
+	const int16_t gp_max_score = 24, gp_min_score = 0, gp_max_limit = 20, gp_min_limit = 4, meg_max_score = 16, meg_min_score = 0;
+	int16_t eval = 0, men_eval = 0, mg_tables_eval = 0, eg_tables_eval = 0, gp_score = 0, mg_score, eg_score;
 
-	for (int i = 0, m = BOARD_SIZE - 1; i < BOARD_SIZE; ++i, --m)
-		for (int j = 0, n = BOARD_SIZE - 1; j < BOARD_SIZE; ++j, --n)
-			if (board[i][j].man!=chessman::none)
+	chesspoint cell((uint8_t)0, (uint8_t)0);
+	for (cell.x = (uint8_t)0; cell.x < BOARD_SIZE; ++cell.x)
+		for (cell.y = (uint8_t)0; cell.y < BOARD_SIZE; ++cell.y)
+			if (board[cell.x][cell.y].man != chessman::none)
 			{
-				switch (board[i][j].color)
+				chesspoint eval_table_cell = cell;
+
+				switch (board[cell.x][cell.y].color)
 				{
 				case chesscolor::white:
 					if (rotated)
-					{
-						mg_eval += evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::middle_game_tables[(uint8_t)board[i][j].man][m*BOARD_SIZE+n];
-						eg_eval += evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::end_game_tables[(uint8_t)board[i][j].man][m * BOARD_SIZE + n];
-					}
-					else
-					{
-						mg_eval += evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::middle_game_tables[(uint8_t)board[i][j].man][i * BOARD_SIZE + j];
-						eg_eval += evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::end_game_tables[(uint8_t)board[i][j].man][i * BOARD_SIZE + j];
-					}
+						eval_table_cell.rotate();
+
+					men_eval += evaluation::men_score_table[(uint8_t)board[cell.x][cell.y].man];
+					mg_tables_eval += evaluation::middle_game_tables[(uint8_t)board[cell.x][cell.y].man][eval_table_cell.x * BOARD_SIZE + eval_table_cell.y];
+					eg_tables_eval += evaluation::end_game_tables[(uint8_t)board[cell.x][cell.y].man][eval_table_cell.x * BOARD_SIZE + eval_table_cell.y];
+
 					break;
 
 				case chesscolor::black:
-					if (rotated)
-					{
-						mg_eval -= evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::middle_game_tables[(uint8_t)board[i][j].man][i * BOARD_SIZE + j];
-						eg_eval -= evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::end_game_tables[(uint8_t)board[i][j].man][i * BOARD_SIZE + j];
-					}
-					else
-					{
-						mg_eval -= evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::middle_game_tables[(uint8_t)board[i][j].man][m * BOARD_SIZE + n];
-						eg_eval -= evaluation::men_score_table[(uint8_t)board[i][j].man]
-							+evaluation::end_game_tables[(uint8_t)board[i][j].man][m * BOARD_SIZE + n];
-					}
+					if (!rotated)
+						eval_table_cell.rotate();
+
+					men_eval -= evaluation::men_score_table[(uint8_t)board[cell.x][cell.y].man];
+					mg_tables_eval -= evaluation::middle_game_tables[(uint8_t)board[cell.x][cell.y].man][eval_table_cell.x * BOARD_SIZE + eval_table_cell.y];
+					eg_tables_eval -= evaluation::end_game_tables[(uint8_t)board[cell.x][cell.y].man][eval_table_cell.x * BOARD_SIZE + eval_table_cell.y];
+
 					break;
 				}
 
-				game_phase_score += evaluation::game_phase_score_table[(uint8_t)board[i][j].man];
+				gp_score += evaluation::game_phase_score_table[(uint8_t)board[cell.x][cell.y].man];
 			}
 
-	if (game_phase_score > 24)
-		game_phase_score = 24;
+	if (gp_score > gp_max_score)
+		gp_score = gp_max_score;
 
-	eval = (mg_eval * game_phase_score + eg_eval * (24 - game_phase_score)) / 24;
+	if (gp_score < gp_min_limit)
+	{
+		mg_score = meg_min_score;
+		eg_score = meg_max_score;
+	}
+	else if (gp_score > gp_max_limit)
+	{
+		mg_score = meg_max_score;
+		eg_score = meg_min_score;
+	}
+	else
+	{
+		mg_score = gp_score - gp_min_limit;
+		eg_score = gp_max_limit - gp_score;
+	}
+
+	eval = men_eval + ((mg_tables_eval * mg_score + eg_tables_eval * eg_score) / meg_max_score);
 
 	switch (status)
 	{
@@ -149,59 +155,69 @@ int16_t chessboard::evaluate() const
 	return eval;
 }
 
+chessstatus chessboard::get_board_status() const
+{
+	return status;
+}
+
 stack<chessmove> chessboard::get_moves() const
 {
 	stack<chessmove> moves;
 
-	for (int i = 0; i < BOARD_SIZE; ++i)
-		for (int j = 0; j < BOARD_SIZE; ++j)
-			if (board[i][j].color == next_move)
-				switch (board[i][j].man)
+	chesspoint cell((uint8_t)0, (uint8_t)0);
+	for (cell.x = (uint8_t)0; cell.x < BOARD_SIZE; ++cell.x)
+		for (cell.y = (uint8_t)0; cell.y < BOARD_SIZE; ++cell.y)
+		{
+			if ((rotated && next_move == chesscolor::white) || (!rotated && next_move == chesscolor::black))
+				cell.rotate();
+
+			if (board[cell.x][cell.y].color == next_move)
+				switch (board[cell.x][cell.y].man)
 				{
 				case chessman::king:
 
 					// King moves 1 cell
-					for (int m = i - 1; m <= i + 1; ++m)
-						for (int n = j - 1; n <= j + 1; ++n)
-							if (m >= 0 && m < BOARD_SIZE && n >= 0 && n < BOARD_SIZE && (m != i || n != j) && board[m][n].color != next_move
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+					for (int8_t i = cell.x - 1; i <= cell.x + 1; ++i)
+						for (int8_t j = cell.y - 1; j <= cell.y + 1; ++j)
+							if (i >= 0 && i < BOARD_SIZE && j >= 0 && j < BOARD_SIZE && (i != cell.x || j != cell.y) && board[i][j].color != next_move
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 					// Castling
-					if (board[i][j].state == chessstate::untouched)
+					if (board[cell.x][cell.y].state == chessstate::untouched)
 					{
 						// Right castling
-						if (board[i][BOARD_SIZE - 1].state == chessstate::untouched && status != chessstatus::check
-							&& !is_threaten(!next_move, chesspoint((uint8_t)i, (uint8_t)j + 1)))
+						if (board[cell.x][BOARD_SIZE - 1].state == chessstate::untouched && status != chessstatus::check
+							&& !is_threaten(!next_move, chesspoint((uint8_t)cell.x, (uint8_t)cell.y + 1)))
 						{
 							bool clear = true;
 
-							for (int k = j + 1; k < BOARD_SIZE - 1; ++k)
-								if (board[i][k].man != chessman::none)
+							for (int8_t k = cell.y + 1; k < BOARD_SIZE - 1; ++k)
+								if (board[cell.x][k].man != chessman::none)
 								{
 									clear = false;
 									break;
 								}
 
-							if (clear && check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)j + 2)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)j + 2));
+							if (clear && check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)cell.y + 2)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)cell.y + 2));
 						}
 
 						// Left castling
-						if (board[i][0].state == chessstate::untouched && status != chessstatus::check
-							&& !is_threaten(!next_move, chesspoint((uint8_t)i, (uint8_t)j - 1)))
+						if (board[cell.x][0].state == chessstate::untouched && status != chessstatus::check
+							&& !is_threaten(!next_move, chesspoint((uint8_t)cell.x, (uint8_t)cell.y - 1)))
 						{
 							bool clear = true;
 
-							for (int k = j - 1; k >= 1; --k)
-								if (board[i][k].man != chessman::none)
+							for (int8_t k = cell.y - 1; k >= 1; --k)
+								if (board[cell.x][k].man != chessman::none)
 								{
 									clear = false;
 									break;
 								}
 
-							if (clear && check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)j - 2)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)j - 2));
+							if (clear && check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)cell.y - 2)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)cell.y - 2));
 						}
 					}
 
@@ -210,16 +226,16 @@ stack<chessmove> chessboard::get_moves() const
 				case chessman::queen:
 
 					// Queen moves top right
-					for (int m = i + 1, n = j + 1; m < BOARD_SIZE && n < BOARD_SIZE; ++m, ++n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x + 1, j = cell.y + 1; i < BOARD_SIZE && j < BOARD_SIZE; ++i, ++j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -227,16 +243,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves top left
-					for (int m = i + 1, n = j - 1; m < BOARD_SIZE && n >= 0; ++m, --n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x + 1, j = cell.y - 1; i < BOARD_SIZE && j >= 0; ++i, --j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -244,16 +260,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves bottom right
-					for (int m = i - 1, n = j + 1; m >= 0 && n < BOARD_SIZE; --m, ++n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x - 1, j = cell.y + 1; i >= 0 && j < BOARD_SIZE; --i, ++j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -261,16 +277,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves bottom left
-					for (int m = i - 1, n = j - 1; m >= 0 && n >= 0; --m, --n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x - 1, j = cell.y - 1; i >= 0 && j >= 0; --i, --j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -278,16 +294,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves top
-					for (int k = i + 1; k < BOARD_SIZE; ++k)
-						if (board[k][j].color == chesscolor::none)
+					for (int8_t k = cell.x + 1; k < BOARD_SIZE; ++k)
+						if (board[k][cell.y].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 						}
-						else if (board[k][j].color == !next_move)
+						else if (board[k][cell.y].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 
 							break;
 						}
@@ -295,16 +311,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves bottom
-					for (int k = i - 1; k >= 0; --k)
-						if (board[k][j].color == chesscolor::none)
+					for (int8_t k = cell.x - 1; k >= 0; --k)
+						if (board[k][cell.y].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 						}
-						else if (board[k][j].color == !next_move)
+						else if (board[k][cell.y].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 
 							break;
 						}
@@ -312,16 +328,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves right
-					for (int k = j + 1; k < BOARD_SIZE; ++k)
-						if (board[i][k].color == chesscolor::none)
+					for (int8_t k = cell.y + 1; k < BOARD_SIZE; ++k)
+						if (board[cell.x][k].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 						}
-						else if (board[i][k].color == !next_move)
+						else if (board[cell.x][k].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 
 							break;
 						}
@@ -329,16 +345,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Queen moves left
-					for (int k = j - 1; k >= 0; --k)
-						if (board[i][k].color == chesscolor::none)
+					for (int8_t k = cell.y - 1; k >= 0; --k)
+						if (board[cell.x][k].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 						}
-						else if (board[i][k].color == !next_move)
+						else if (board[cell.x][k].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 
 							break;
 						}
@@ -350,16 +366,16 @@ stack<chessmove> chessboard::get_moves() const
 				case chessman::bishop:
 
 					// Bishop moves top right
-					for (int m = i + 1, n = j + 1; m < BOARD_SIZE && n < BOARD_SIZE; ++m, ++n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x + 1, j = cell.y + 1; i < BOARD_SIZE && j < BOARD_SIZE; ++i, ++j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -367,16 +383,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Bishop moves top left
-					for (int m = i + 1, n = j - 1; m < BOARD_SIZE && n >= 0; ++m, --n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x + 1, j = cell.y - 1; i < BOARD_SIZE && j >= 0; ++i, --j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -384,16 +400,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Bishop moves bottom right
-					for (int m = i - 1, n = j + 1; m >= 0 && n < BOARD_SIZE; --m, ++n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x - 1, j = cell.y + 1; i >= 0 && j < BOARD_SIZE; --i, ++j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -401,16 +417,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Bishop moves bottom left
-					for (int m = i - 1, n = j - 1; m >= 0 && n >= 0; --m, --n)
-						if (board[m][n].color == chesscolor::none)
+					for (int8_t i = cell.x - 1, j = cell.y - 1; i >= 0 && j >= 0; --i, --j)
+						if (board[i][j].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 						}
-						else if (board[m][n].color == !next_move)
+						else if (board[i][j].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)m, (uint8_t)n));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)i, (uint8_t)j));
 
 							break;
 						}
@@ -422,60 +438,60 @@ stack<chessmove> chessboard::get_moves() const
 				case chessman::knight:
 
 					// Knight moves [+2, +1]
-					if (i + 2 < BOARD_SIZE && j + 1 < BOARD_SIZE && board[i + 2][j + 1].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j + 1)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j + 1));
+					if (cell.x + 2 < BOARD_SIZE && cell.y + 1 < BOARD_SIZE && board[cell.x + 2][cell.y + 1].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y + 1)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y + 1));
 
 					// Knight moves [+2, -1]
-					if (i + 2 < BOARD_SIZE && j - 1 >= 0 && board[i + 2][j - 1].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j - 1)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j - 1));
+					if (cell.x + 2 < BOARD_SIZE && cell.y - 1 >= 0 && board[cell.x + 2][cell.y - 1].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y - 1)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y - 1));
 
 					// Knight moves [+1, +2]
-					if (i + 1 < BOARD_SIZE && j + 2 < BOARD_SIZE && board[i + 1][j + 2].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 2)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 2));
+					if (cell.x + 1 < BOARD_SIZE && cell.y + 2 < BOARD_SIZE && board[cell.x + 1][cell.y + 2].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 2)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 2));
 
 					// Knight moves [+1, -2]
-					if (i + 1 < BOARD_SIZE && j - 2 >= 0 && board[i + 1][j - 2].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 2)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 2));
+					if (cell.x + 1 < BOARD_SIZE && cell.y - 2 >= 0 && board[cell.x + 1][cell.y - 2].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 2)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 2));
 
 					// Knight moves [-1, +2]
-					if (i - 1 >= 0 && j + 2 < BOARD_SIZE && board[i - 1][j + 2].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 2)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 2));
+					if (cell.x - 1 >= 0 && cell.y + 2 < BOARD_SIZE && board[cell.x - 1][cell.y + 2].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 2)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 2));
 
 					// Knight moves [-1, -2]
-					if (i - 1 >= 0 && j - 2 >= 0 && board[i - 1][j - 2].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 2)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 2));
+					if (cell.x - 1 >= 0 && cell.y - 2 >= 0 && board[cell.x - 1][cell.y - 2].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 2)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 2));
 
 					// Knight moves [-2, +1]
-					if (i - 2 >= 0 && j + 1 < BOARD_SIZE && board[i - 2][j + 1].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j + 1)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j + 1));
+					if (cell.x - 2 >= 0 && cell.y + 1 < BOARD_SIZE && board[cell.x - 2][cell.y + 1].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y + 1)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y + 1));
 
 					// Knight moves [-2, -1]
-					if (i - 2 >= 0 && j - 1 >= 0 && board[i - 2][j - 1].color != next_move
-						&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j - 1)))
-						moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j - 1));
+					if (cell.x - 2 >= 0 && cell.y - 1 >= 0 && board[cell.x - 2][cell.y - 1].color != next_move
+						&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y - 1)))
+						moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y - 1));
 
 					break;
 
 				case chessman::rook:
 
 					// Rook moves top
-					for (int k = i + 1; k < BOARD_SIZE; ++k)
-						if (board[k][j].color == chesscolor::none)
+					for (int8_t k = cell.x + 1; k < BOARD_SIZE; ++k)
+						if (board[k][cell.y].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 						}
-						else if (board[k][j].color == !next_move)
+						else if (board[k][cell.y].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 
 							break;
 						}
@@ -483,16 +499,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Rook moves bottom
-					for (int k = i - 1; k >= 0; --k)
-						if (board[k][j].color == chesscolor::none)
+					for (int8_t k = cell.x - 1; k >= 0; --k)
+						if (board[k][cell.y].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 						}
-						else if (board[k][j].color == !next_move)
+						else if (board[k][cell.y].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)k, (uint8_t)j));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)k, (uint8_t)cell.y));
 
 							break;
 						}
@@ -500,16 +516,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Rook moves right
-					for (int k = j + 1; k < BOARD_SIZE; ++k)
-						if (board[i][k].color == chesscolor::none)
+					for (int8_t k = cell.y + 1; k < BOARD_SIZE; ++k)
+						if (board[cell.x][k].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 						}
-						else if (board[i][k].color == !next_move)
+						else if (board[cell.x][k].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 
 							break;
 						}
@@ -517,16 +533,16 @@ stack<chessmove> chessboard::get_moves() const
 							break;
 
 					// Rook moves left
-					for (int k = j - 1; k >= 0; --k)
-						if (board[i][k].color == chesscolor::none)
+					for (int8_t k = cell.y - 1; k >= 0; --k)
+						if (board[cell.x][k].color == chesscolor::none)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 						}
-						else if (board[i][k].color == !next_move)
+						else if (board[cell.x][k].color == !next_move)
 						{
-							if (check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i, (uint8_t)k));
+							if (check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x, (uint8_t)k));
 
 							break;
 						}
@@ -541,112 +557,116 @@ stack<chessmove> chessboard::get_moves() const
 					if ((rotated && next_move == chesscolor::white) || (!rotated && next_move == chesscolor::black))
 					{
 						// In passing
-						if (board[i][j].state == chessstate::touched)
+						if (board[cell.x][cell.y].state == chessstate::touched)
 						{
 							// In passing right
-							if (i - 1 >= 0 && j + 1 < BOARD_SIZE && board[i][j + 1].color != next_move && board[i][j + 1].timer == chesstimer::charged
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 1));
+							if (cell.x - 1 >= 0 && cell.y + 1 < BOARD_SIZE && board[cell.x][cell.y + 1].color != next_move && board[cell.x][cell.y + 1].timer == chesstimer::charged
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 1));
 
 							// In passing left
-							if (i - 1 >= 0 && j - 1 >= 0 && board[i][j - 1].color != next_move && board[i][j - 1].timer == chesstimer::charged
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 1));
+							if (cell.x - 1 >= 0 && cell.y - 1 >= 0 && board[cell.x][cell.y - 1].color != next_move && board[cell.x][cell.y - 1].timer == chesstimer::charged
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 1));
 						}
 
 						// Long move
-						if (board[i][j].state == chessstate::untouched && board[i - 1][j].man == chessman::none && board[i - 2][j].man == chessman::none
-							&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j)))
-							moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 2, (uint8_t)j));
+						if (board[cell.x][cell.y].state == chessstate::untouched && board[cell.x - 1][cell.y].man == chessman::none && board[cell.x - 2][cell.y].man == chessman::none
+							&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y)))
+							moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 2, (uint8_t)cell.y));
 
 						// No promotion else promotion
-						if (i - 1 >= 1)
+						if (cell.x - 1 >= 1)
 						{
 							// Short move
-							if (board[i - 1][j].man == chessman::none && check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j));
+							if (board[cell.x - 1][cell.y].man == chessman::none && check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y));
 
 							// Right capture
-							if (j + 1 < BOARD_SIZE && board[i - 1][j + 1].color == !next_move
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 1));
+							if (cell.y + 1 < BOARD_SIZE && board[cell.x - 1][cell.y + 1].color == !next_move
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 1));
 
 							// Left capture
-							if (j - 1 >= 0 && board[i - 1][j - 1].color == !next_move
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 1));
+							if (cell.y - 1 >= 0 && board[cell.x - 1][cell.y - 1].color == !next_move
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 1));
 						}
-						else if (i - 1 >= 0)
+						else if (cell.x - 1 >= 0)
 						{
 							// Short move with promotion
-							if (board[i - 1][j].man == chessman::none)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j));
+							if (board[cell.x - 1][cell.y].man == chessman::none)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y));
 
 							// Right capture with promotion
-							if (j + 1 < BOARD_SIZE && board[i - 1][j + 1].color == !next_move)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j + 1));
+							if (cell.y + 1 < BOARD_SIZE && board[cell.x - 1][cell.y + 1].color == !next_move)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y + 1));
 
 							// Left capture with promotion
-							if (j - 1 >= 0 && board[i - 1][j - 1].color == !next_move)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i - 1, (uint8_t)j - 1));
+							if (cell.y - 1 >= 0 && board[cell.x - 1][cell.y - 1].color == !next_move)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x - 1, (uint8_t)cell.y - 1));
 						}
 					}
 					else
 					{
 						// In passing
-						if (board[i][j].state == chessstate::touched)
+						if (board[cell.x][cell.y].state == chessstate::touched)
 						{
 							// In passing right
-							if (i + 1 < BOARD_SIZE && j + 1 < BOARD_SIZE && board[i][j + 1].color != next_move && board[i][j + 1].timer == chesstimer::charged
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 1));
+							if (cell.x + 1 < BOARD_SIZE && cell.y + 1 < BOARD_SIZE && board[cell.x][cell.y + 1].color != next_move && board[cell.x][cell.y + 1].timer == chesstimer::charged
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 1));
 
 							// In passing left
-							if (i + 1 < BOARD_SIZE && j - 1 >= 0 && board[i][j - 1].color != next_move && board[i][j - 1].timer == chesstimer::charged
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 1));
+							if (cell.x + 1 < BOARD_SIZE && cell.y - 1 >= 0 && board[cell.x][cell.y - 1].color != next_move && board[cell.x][cell.y - 1].timer == chesstimer::charged
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 1));
 						}
 
 						// Long move
-						if (board[i][j].state == chessstate::untouched && board[i + 1][j].man == chessman::none && board[i + 2][j].man == chessman::none
-							&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j)))
-							moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 2, (uint8_t)j));
+						if (board[cell.x][cell.y].state == chessstate::untouched && board[cell.x + 1][cell.y].man == chessman::none && board[cell.x + 2][cell.y].man == chessman::none
+							&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y)))
+							moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 2, (uint8_t)cell.y));
 
 						// No promotion else promotion
-						if (i + 1 < BOARD_SIZE - 1)
+						if (cell.x + 1 < BOARD_SIZE - 1)
 						{
 							// Short move
-							if (board[i + 1][j].man == chessman::none && check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j));
+							if (board[cell.x + 1][cell.y].man == chessman::none && check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y));
 
 							// Right capture
-							if (j + 1 < BOARD_SIZE && board[i + 1][j + 1].color == !next_move
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 1));
+							if (cell.y + 1 < BOARD_SIZE && board[cell.x + 1][cell.y + 1].color == !next_move
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 1));
 
 							// Left capture
-							if (j - 1 >= 0 && board[i + 1][j - 1].color == !next_move
-								&& check_no_check(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 1)))
-								moves.push(chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 1));
+							if (cell.y - 1 >= 0 && board[cell.x + 1][cell.y - 1].color == !next_move
+								&& check_no_check(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 1)))
+								moves.push(chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 1));
 						}
-						else if (i + 1 < BOARD_SIZE)
+						else if (cell.x + 1 < BOARD_SIZE)
 						{
 							// Short move with promotion
-							if (board[i + 1][j].man == chessman::none)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j));
+							if (board[cell.x + 1][cell.y].man == chessman::none)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y));
 
 							// Right capture with promotion
-							if (j + 1 < BOARD_SIZE && board[i + 1][j + 1].color == !next_move)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j + 1));
+							if (cell.y + 1 < BOARD_SIZE && board[cell.x + 1][cell.y + 1].color == !next_move)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y + 1));
 
 							// Left capture with promotion
-							if (j - 1 >= 0 && board[i + 1][j - 1].color == !next_move)
-								check_and_push_promotions(moves, chessmove((uint8_t)i, (uint8_t)j, (uint8_t)i + 1, (uint8_t)j - 1));
+							if (cell.y - 1 >= 0 && board[cell.x + 1][cell.y - 1].color == !next_move)
+								check_and_push_promotions(moves, chessmove((uint8_t)cell.x, (uint8_t)cell.y, (uint8_t)cell.x + 1, (uint8_t)cell.y - 1));
 						}
 					}
 
 					break;
 				}
+
+			if ((rotated && next_move == chesscolor::white) || (!rotated && next_move == chesscolor::black))
+				cell.rotate();
+		}
 
 	return moves;
 }
@@ -654,8 +674,8 @@ stack<chessmove> chessboard::get_moves() const
 bool chessboard::is_check() const
 {
 	// Seek for king of next move color
-	for (int i = 0; i < BOARD_SIZE; ++i)
-		for (int j = 0; j < BOARD_SIZE; ++j)
+	for (int8_t i = 0; i < BOARD_SIZE; ++i)
+		for (int8_t j = 0; j < BOARD_SIZE; ++j)
 			if (board[i][j].color == next_move && board[i][j].man == chessman::king)
 
 				// Return if king treaten by last move color men
@@ -674,8 +694,8 @@ bool chessboard::is_deadend() const
 	uint8_t deadend_3[8] = { 61, 2, 0, 0, 1, 0, 0, 0 };
 	uint8_t deadend_4[8] = { 60, 2, 0, 2, 0, 0, 0, 0 };
 
-	for (int i = 0; i < BOARD_SIZE; ++i)
-		for (int j = 0; j < BOARD_SIZE; ++j)
+	for (int8_t i = 0; i < BOARD_SIZE; ++i)
+		for (int8_t j = 0; j < BOARD_SIZE; ++j)
 			++(men_count[(uint8_t)board[i][j].man]);
 
 	if ((uint64_t)men_count == (uint64_t)deadend_1 || (uint64_t)men_count == (uint64_t)deadend_2 || (uint64_t)men_count == (uint64_t)deadend_3)
@@ -683,10 +703,10 @@ bool chessboard::is_deadend() const
 	else if ((uint64_t)men_count == (uint64_t)deadend_4)
 	{
 		chesscell first_bishop;
-		int k = -1;
+		int8_t k = -1;
 
-		for (int i = 0; i < BOARD_SIZE; ++i)
-			for (int j = 0; j < BOARD_SIZE; ++j)
+		for (int8_t i = 0; i < BOARD_SIZE; ++i)
+			for (int8_t j = 0; j < BOARD_SIZE; ++j)
 				if (board[i][j].man == chessman::bishop)
 					if (first_bishop.man == chessman::none)
 					{
@@ -700,11 +720,16 @@ bool chessboard::is_deadend() const
 		return false;
 }
 
+bool chessboard::is_rotated() const
+{
+	return rotated;
+}
+
 bool chessboard::is_self_check() const
 {
 	// Seek for king of last move color
-	for (int i = 0; i < BOARD_SIZE; ++i)
-		for (int j = 0; j < BOARD_SIZE; ++j)
+	for (int8_t i = 0; i < BOARD_SIZE; ++i)
+		for (int8_t j = 0; j < BOARD_SIZE; ++j)
 			if (board[i][j].color == !next_move && board[i][j].man == chessman::king)
 
 				// Return if king treaten by next move color men
@@ -716,10 +741,14 @@ bool chessboard::is_self_check() const
 
 bool chessboard::is_threaten(chesscolor color, chesspoint point) const
 {
-	// King can not threaten king
+	// King
+	for (int8_t i = point.x - 1; i <= point.x + 1; ++i)
+		for (int8_t j = point.y - 1; j <= point.y + 1; ++j)
+			if (i >= 0 && i < BOARD_SIZE && j >= 0 && j < BOARD_SIZE && (i != point.x || j != point.y) && board[i][j].color == color && board[i][j].man == chessman::king)
+				return true;
 
 	// Queen/rook on top
-	for (int k = point.x + 1; k < BOARD_SIZE; ++k)
+	for (int8_t k = point.x + 1; k < BOARD_SIZE; ++k)
 		if (board[k][point.y].man != chessman::none)
 			if (board[k][point.y].color == color && (board[k][point.y].man == chessman::queen || board[k][point.y].man == chessman::rook))
 				return true;
@@ -727,7 +756,7 @@ bool chessboard::is_threaten(chesscolor color, chesspoint point) const
 				break;
 
 	// Queen/rook on bottom
-	for (int k = point.x - 1; k >= 0; --k)
+	for (int8_t k = point.x - 1; k >= 0; --k)
 		if (board[k][point.y].man != chessman::none)
 			if (board[k][point.y].color == color && (board[k][point.y].man == chessman::queen || board[k][point.y].man == chessman::rook))
 				return true;
@@ -735,7 +764,7 @@ bool chessboard::is_threaten(chesscolor color, chesspoint point) const
 				break;
 
 	// Queen/rook on right
-	for (int k = point.y + 1; k < BOARD_SIZE; ++k)
+	for (int8_t k = point.y + 1; k < BOARD_SIZE; ++k)
 		if (board[point.x][k].man != chessman::none)
 			if (board[point.x][k].color == color && (board[point.x][k].man == chessman::queen || board[point.x][k].man == chessman::rook))
 				return true;
@@ -743,7 +772,7 @@ bool chessboard::is_threaten(chesscolor color, chesspoint point) const
 				break;
 
 	// Queen/rook on left
-	for (int k = point.y - 1; k >= 0; --k)
+	for (int8_t k = point.y - 1; k >= 0; --k)
 		if (board[point.x][k].man != chessman::none)
 			if (board[point.x][k].color == color && (board[point.x][k].man == chessman::queen || board[point.x][k].man == chessman::rook))
 				return true;
@@ -751,33 +780,33 @@ bool chessboard::is_threaten(chesscolor color, chesspoint point) const
 				break;
 
 	// Queen/bishop on top right
-	for (int m = point.x + 1, n = point.y + 1; m < BOARD_SIZE && n < BOARD_SIZE; ++m, ++n)
-		if (board[m][n].man != chessman::none)
-			if (board[m][n].color == color && (board[m][n].man == chessman::queen || board[m][n].man == chessman::bishop))
+	for (int8_t i = point.x + 1, j = point.y + 1; i < BOARD_SIZE && j < BOARD_SIZE; ++i, ++j)
+		if (board[i][j].man != chessman::none)
+			if (board[i][j].color == color && (board[i][j].man == chessman::queen || board[i][j].man == chessman::bishop))
 				return true;
 			else
 				break;
 
 	// Queen/bishop on top left
-	for (int m = point.x + 1, n = point.y - 1; m < BOARD_SIZE && n >= 0; ++m, --n)
-		if (board[m][n].man != chessman::none)
-			if (board[m][n].color == color && (board[m][n].man == chessman::queen || board[m][n].man == chessman::bishop))
+	for (int8_t i = point.x + 1, j = point.y - 1; i < BOARD_SIZE && j >= 0; ++i, --j)
+		if (board[i][j].man != chessman::none)
+			if (board[i][j].color == color && (board[i][j].man == chessman::queen || board[i][j].man == chessman::bishop))
 				return true;
 			else
 				break;
 
 	// Queen/bishop on bottom right
-	for (int m = point.x - 1, n = point.y + 1; m >= 0 && n < BOARD_SIZE; --m, ++n)
-		if (board[m][n].man != chessman::none)
-			if (board[m][n].color == color && (board[m][n].man == chessman::queen || board[m][n].man == chessman::bishop))
+	for (int8_t i = point.x - 1, j = point.y + 1; i >= 0 && j < BOARD_SIZE; --i, ++j)
+		if (board[i][j].man != chessman::none)
+			if (board[i][j].color == color && (board[i][j].man == chessman::queen || board[i][j].man == chessman::bishop))
 				return true;
 			else
 				break;
 
 	// Queen/bishop on bottom left
-	for (int m = point.x - 1, n = point.y - 1; m >= 0 && n >= 0; --m, --n)
-		if (board[m][n].man != chessman::none)
-			if (board[m][n].color == color && (board[m][n].man == chessman::queen || board[m][n].man == chessman::bishop))
+	for (int8_t i = point.x - 1, j = point.y - 1; i >= 0 && j >= 0; --i, --j)
+		if (board[i][j].man != chessman::none)
+			if (board[i][j].color == color && (board[i][j].man == chessman::queen || board[i][j].man == chessman::bishop))
 				return true;
 			else
 				break;
@@ -857,10 +886,10 @@ stack<chessmove> chessboard::make_move(chessmove move)
 	try
 	{
 		// Uncharge all timers
-		for (int i = 0; i < BOARD_SIZE; ++i)
-			for (int j = 0; j < BOARD_SIZE; ++j)
+		for (int8_t i = 0; i < BOARD_SIZE; ++i)
+			for (int8_t j = 0; j < BOARD_SIZE; ++j)
 				if (board[i][j].color == next_move)
-					board[i][j].timer=chesstimer::uncharged;
+					board[i][j].timer = chesstimer::uncharged;
 
 		switch (board[move.from.x][move.from.y].man)
 		{
@@ -870,7 +899,7 @@ stack<chessmove> chessboard::make_move(chessmove move)
 			if (move.from.y + 2 == move.to.y)
 			{
 				board[move.to.x][move.to.y - 1] = board[move.from.x][BOARD_SIZE - 1];
-				board[move.to.x][move.to.y - 1].state=chessstate::touched;
+				board[move.to.x][move.to.y - 1].state = chessstate::touched;
 				board[move.from.x][BOARD_SIZE - 1].set_empty();
 			}
 
@@ -878,7 +907,7 @@ stack<chessmove> chessboard::make_move(chessmove move)
 			if (move.from.y - 2 == move.to.y)
 			{
 				board[move.to.x][move.to.y + 1] = board[move.from.x][0];
-				board[move.to.x][move.to.y + 1].state=chessstate::touched;
+				board[move.to.x][move.to.y + 1].state = chessstate::touched;
 				board[move.from.x][0].set_empty();
 			}
 
@@ -888,7 +917,7 @@ stack<chessmove> chessboard::make_move(chessmove move)
 
 			// Long move
 			if (abs(move.from.x - move.to.x) == 2)
-				board[move.from.x][move.from.y].timer=chesstimer::charged;
+				board[move.from.x][move.from.y].timer = chesstimer::charged;
 
 			// In passing
 			if (move.from.y != move.to.y && board[move.to.x][move.to.y].man == chessman::none)
@@ -896,14 +925,14 @@ stack<chessmove> chessboard::make_move(chessmove move)
 
 			// Promotion
 			if (move.to.x == BOARD_SIZE - 1 || move.to.x == 0)
-				board[move.from.x][move.from.y].man=move.to_promote;
+				board[move.from.x][move.from.y].man = move.to_promote;
 
 			break;
 		}
 
 		// Move man
 		board[move.to.x][move.to.y] = board[move.from.x][move.from.y];
-		board[move.to.x][move.to.y].state=chessstate::touched;
+		board[move.to.x][move.to.y].state = chessstate::touched;
 		board[move.from.x][move.from.y].set_empty();
 
 		// Switch colors
@@ -939,10 +968,10 @@ void chessboard::make_test_move(chessmove move)
 	try
 	{
 		// Uncharge all timers
-		for (int i = 0; i < BOARD_SIZE; ++i)
-			for (int j = 0; j < BOARD_SIZE; ++j)
+		for (int8_t i = 0; i < BOARD_SIZE; ++i)
+			for (int8_t j = 0; j < BOARD_SIZE; ++j)
 				if (board[i][j].color == next_move)
-					board[i][j].timer=chesstimer::uncharged;
+					board[i][j].timer = chesstimer::uncharged;
 
 		switch (board[move.from.x][move.from.y].man)
 		{
@@ -952,7 +981,7 @@ void chessboard::make_test_move(chessmove move)
 			if (move.from.y + 2 == move.to.y)
 			{
 				board[move.to.x][move.to.y - 1] = board[move.from.x][BOARD_SIZE - 1];
-				board[move.to.x][move.to.y - 1].state=chessstate::touched;
+				board[move.to.x][move.to.y - 1].state = chessstate::touched;
 				board[move.from.x][BOARD_SIZE - 1].set_empty();
 			}
 
@@ -960,7 +989,7 @@ void chessboard::make_test_move(chessmove move)
 			if (move.from.y - 2 == move.to.y)
 			{
 				board[move.to.x][move.to.y + 1] = board[move.from.x][0];
-				board[move.to.x][move.to.y + 1].state=chessstate::touched;
+				board[move.to.x][move.to.y + 1].state = chessstate::touched;
 				board[move.from.x][0].set_empty();
 			}
 
@@ -970,7 +999,7 @@ void chessboard::make_test_move(chessmove move)
 
 			// Long move
 			if (abs(move.from.x - move.to.x) == 2)
-				board[move.from.x][move.from.y].timer=chesstimer::charged;
+				board[move.from.x][move.from.y].timer = chesstimer::charged;
 
 			// In passing
 			if (move.from.y != move.to.y && board[move.to.x][move.to.y].man == chessman::none)
@@ -978,14 +1007,14 @@ void chessboard::make_test_move(chessmove move)
 
 			// Promotion
 			if (move.to.x == BOARD_SIZE - 1 || move.to.x == 0)
-				board[move.from.x][move.from.y].man=move.to_promote;
+				board[move.from.x][move.from.y].man = move.to_promote;
 
 			break;
 		}
 
 		// Move man
 		board[move.to.x][move.to.y] = board[move.from.x][move.from.y];
-		board[move.to.x][move.to.y].state=chessstate::touched;
+		board[move.to.x][move.to.y].state = chessstate::touched;
 		board[move.from.x][move.from.y].set_empty();
 
 		// Switch colors
@@ -1000,7 +1029,7 @@ void chessboard::make_test_move(chessmove move)
 	}
 }
 
-chesscolor chessboard::next_move_color() const
+chesscolor chessboard::get_next_move_color() const
 {
 	return next_move;
 }
@@ -1009,7 +1038,7 @@ void chessboard::rotate()
 {
 	rotated = !rotated;
 
-	for (int i = 0; i < BOARD_SIZE / 2; ++i)
-		for (int j = 0; j < BOARD_SIZE; ++j)
+	for (int8_t i = 0; i < BOARD_SIZE / 2; ++i)
+		for (int8_t j = 0; j < BOARD_SIZE; ++j)
 			swap(board[i][j], board[BOARD_SIZE - i - 1][BOARD_SIZE - j - 1]);
 }
