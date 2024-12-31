@@ -1,0 +1,160 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{6D766096-3E12-4EF6-A084-F02E6364A094}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Bluetooth_Chess</RootNamespace>
+    <AssemblyName>Bluetooth_Chess</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="InTheHand.Net.Bluetooth, Version=4.1.0.0, Culture=neutral, PublicKeyToken=ea38caa273134499, processorArchitecture=MSIL">
+      <HintPath>packages\InTheHand.Net.Bluetooth.4.1.43\lib\net462\InTheHand.Net.Bluetooth.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL" />
+    <Reference Include="System" />
+    <Reference Include="System.Activities" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="BluetoothTransaction.cs" />
+    <Compile Include="Cell.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="ChessBoard.cs" />
+    <Compile Include="ChessBotAPI.cs" />
+    <Compile Include="ChessMoveU.cs" />
+    <Compile Include="ChessPointU.cs" />
+    <Compile Include="Promotion.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Promotion.Designer.cs">
+      <DependentUpon>Promotion.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Game.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Game.Designer.cs">
+      <DependentUpon>Game.cs</DependentUpon>
+    </Compile>
+    <Compile Include="BluetoothChess.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="Game.resx">
+      <DependentUpon>Game.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Promotion.resx">
+      <DependentUpon>Promotion.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <None Include="app.config" />
+    <None Include="packages.config" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ChessDesk.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Desk.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WB.png" />
+    <None Include="Resources\BR.png" />
+    <None Include="Resources\BQ.png" />
+    <None Include="Resources\BP.png" />
+    <None Include="Resources\BN.png" />
+    <None Include="Resources\BK.png" />
+    <None Include="Resources\BB.png" />
+    <None Include="Resources\WKng.png" />
+    <None Include="Resources\None.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WK.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WN.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WP.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WQ.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\WR.png" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
